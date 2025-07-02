@@ -1,0 +1,42 @@
+[tool.poetry]
+name        = "finflow"
+version     = "0.1.0"
+description = "Financial operations tracking bot"
+authors     = ["Artemka2031 <pereiatentcev@gmail.com>"]
+readme      = "README.md"
+packages    = [{ include = "src", from = "." }]
+
+[tool.poetry.dependencies]
+python            = "3.13.2"
+pyramid           = "2.0.2"
+cookiecutter      = "2.6.0"
+aiogram           = "3.20.0"
+aiogram_calendar  = "0.6.0"
+sqlalchemy        = "2.0.41"
+asyncpg           = "0.30.0"
+pydantic          = "2.11.7"
+pydantic-settings = "2.1.0"
+python-dotenv     = "1.0.1"
+loguru            = "0.7.2"
+redis             = "6.2.0"
+
+[tool.poetry.group.dev.dependencies]
+black           = "24.4.2"
+isort           = "5.13.2"
+pytest          = "8.0.0"
+pytest-asyncio  = "0.23.5"
+mypy            = "1.10.0"
+
+[build-system]
+requires      = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[virtualenvs]
+in-project = true
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile      = "black"
+line_length  = 120

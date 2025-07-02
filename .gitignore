@@ -1,0 +1,40 @@
+# Byte‑compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+# Distribution / packaging
+build/
+dist/
+.eggs/
+*.egg
+*.egg-info/
+# Installer logs
+pip-log.txt
+# Unit test / coverage reports
+.tox/
+.coverage
+coverage
+coverage.xml
+nosetests.xml
+# PyInstaller
+*.manifest
+*.spec
+# MyPy
+.mypy_cache/
+# Editor files
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.*.sw?
+.sw?
+# Environment & temp
+env*/
+.venv/
+tmp/
+# Databases
+*.sqlite
+Data*.fs*
+# FinFlow specific
+pg_data/
+redis_data/
+# Tests
+test/

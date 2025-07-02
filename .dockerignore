@@ -1,0 +1,12 @@
+# Exclude everything by default
+**/*
+
+# Include source, Poetry files and env samples
+!src/
+!pyproject.toml
+!poetry.lock
+!Dockerfile
+!docker-compose*.yml
+!.env*
+!env.example
+!README.md
