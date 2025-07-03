@@ -1,4 +1,4 @@
-# FinFlow/docker-compose.yml  (dev‑ориентированный по‑умолчанию)
+# FinFlow/docker-compose.dev.yml (dev‑ориентированный по‑умолчанию)
 # Используйте переменную окружения COMPOSE_PROFILES=production,
 # или файл‑override docker-compose.prod.yml, чтобы запустить бота в проде.
 
@@ -9,7 +9,9 @@ services:
   bot:
     build: .
     env_file: .env.prod          # в проде
-    depends_on: [postgres, redis]
+    depends_on:
+      - postgres
+      - redis
     volumes:
       - .:/app
     profiles: ["production"]
@@ -20,12 +22,15 @@ services:
   postgres:
     image: postgres:15
     env_file: .env.dev           # ← dev‑режим по‑умолчанию
-    # Все переменные (POSTGRES_*) берутся напрямую из env‑файла;
-    # блок environment больше не нужен, благодаря чему нет «blank string».
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --------------------------------------------------------------------- #
   # Redis                                                                 #

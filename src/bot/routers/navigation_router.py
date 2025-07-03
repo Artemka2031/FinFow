@@ -17,18 +17,17 @@ from src.bot.keyboards import create_creditor_keyboard, create_wallet_keyboard
 from src.bot.routers.date_type_router import (
     _get_choose_operation_date_message,
     _get_choose_operation_type_message,
-    _get_choose_outcome_source_message,
-    _show_dict_kb,
+    _dict_kb,
 )
 from src.bot.routers.income.income_router import (
-    get_choose_income_wallet_message,
-    get_choose_income_article_message,
+    _choose_income_wallet_msg,
+    _choose_income_article_msg,
 )
 from src.bot.routers.outcome.outcome_router import (
-    _get_choose_project_message as get_choose_outcome_project_message,
-    _get_choose_general_type_message as get_choose_outcome_general_type_message,
-    _get_choose_outcome_article_message,
-    _outcome_chapter_kb,
+    _msg_choose_project as get_choose_outcome_project_message,
+    _msg_choose_general_type as get_choose_outcome_general_type_message,
+    _msg_choose_article,
+    MSG_INDICATE_SOURCE, _kb_source, MSG_CHOOSE_CHAPTER, _kb_chapter,
 )
 from src.bot.routers.transfer.transfer_router import (
     _get_choose_from_wallet_message,
@@ -120,10 +119,10 @@ async def process_back_navigation(cb: CallbackQuery, state: FSMContext, bot: Bot
         text, kb = await _get_choose_operation_type_message()
         message_id = data.get("type_message_id")
     elif prev_state == OperationState.choosing_income_wallet.state:
-        text, kb = await get_choose_income_wallet_message(state)
+        text, kb = await _choose_income_wallet_msg()
         message_id = data.get("income_wallet_message_id")
     elif prev_state == OperationState.choosing_income_article.state:
-        text, kb = await get_choose_income_article_message(cb, state)
+        text, kb = await _choose_income_article_msg(state)
         message_id = data.get("article_message_id")
     elif prev_state == OperationState.choosing_from_wallet.state:
         text, kb = await _get_choose_from_wallet_message(cb, state)
@@ -132,30 +131,30 @@ async def process_back_navigation(cb: CallbackQuery, state: FSMContext, bot: Bot
         text, kb = await _get_choose_to_wallet_message(cb, state)
         message_id = None
     elif prev_state == OperationState.choosing_outcome_wallet_or_creditor.state:
-        text, kb = await _get_choose_outcome_source_message()
+        text, kb = MSG_INDICATE_SOURCE, _kb_source()
         message_id = data.get("outcome_source_message_id")
     elif prev_state == OperationState.choosing_outcome_wallet.state:
-        text, kb = await _show_dict_kb(cb, state, create_wallet_keyboard, OperationState.choosing_outcome_wallet)
+        text, kb = await _dict_kb(state, create_wallet_keyboard, OperationState.choosing_outcome_wallet)
         message_id = data.get("outcome_source_message_id")
     elif prev_state == OperationState.choosing_outcome_creditor.state:
-        text, kb = await _show_dict_kb(cb, state, create_creditor_keyboard, OperationState.choosing_outcome_creditor)
+        text, kb = await _dict_kb(state, create_creditor_keyboard, OperationState.choosing_outcome_creditor)
         message_id = data.get("outcome_source_message_id")
     elif prev_state == OperationState.choosing_outcome_chapter.state:
-        text, kb = "📑 Выберите категорию выбытия:", _outcome_chapter_kb()
+        text, kb = MSG_CHOOSE_CHAPTER, _kb_chapter()
         message_id = data.get("chapter_message_id")
     elif prev_state == OperationState.choosing_outcome_project.state:
-        text, kb = await get_choose_outcome_project_message(cb, state)
+        text, kb = await get_choose_outcome_project_message(state)
         message_id = data.get("project_message_id")
     elif prev_state == OperationState.choosing_outcome_general_type.state:
-        text, kb = await get_choose_outcome_general_type_message(cb, state)
+        text, kb = await get_choose_outcome_general_type_message()
         message_id = data.get("general_type_message_id")
     elif prev_state == OperationState.choosing_outcome_article.state:
-        text, kb = await _get_choose_outcome_article_message(cb, state)
+        text, kb = await _msg_choose_article(state)
         message_id = data.get("article_message_id")
     elif prev_state in {OperationState.choosing_contractor.state, OperationState.choosing_material.state,
                         OperationState.choosing_employee.state, OperationState.choosing_creditor.state,
                         OperationState.choosing_founder.state}:
-        text, kb = await _get_choose_outcome_article_message(cb, state)
+        text, kb = await _msg_choose_article(state)
         message_id = data.get("article_message_id")
     else:
         await cb.answer("Невозможно вернуться к этому состоянию.")

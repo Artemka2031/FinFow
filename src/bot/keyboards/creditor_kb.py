@@ -6,12 +6,14 @@
 • Загружает всех кредиторов через метод get_creditors.
 • Строит InlineKeyboardMarkup с callback‑схемой CRD.
 • Отображает все записи для отладки (без пагинации).
+• Исключает текущего кредитора (outcome_creditor) при наличии в состоянии.
 """
 
-from typing import List
+from typing import List, Optional
 
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.filters.callback_data import CallbackData
+from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.keyboards.utils import build_inline_keyboard
@@ -24,18 +26,25 @@ class CreditorCallback(CallbackData, prefix="CRD"):
     creditor_id: int
 
 
-async def create_creditor_keyboard(session: AsyncSession, state=None) -> InlineKeyboardMarkup:
+async def create_creditor_keyboard(session: AsyncSession, state: Optional[FSMContext] = None) -> InlineKeyboardMarkup:
     """
-    Собирает InlineKeyboardMarkup со списком всех кредиторов.
+    Собирает InlineKeyboardMarkup со списком всех кредиторов, исключая текущего кредитора из состояния.
 
     Args:
         session: активная AsyncSession.
-        state: FSMContext для добавления кнопки «Назад» (опционально).
+        state: FSMContext для получения outcome_creditor и добавления кнопки «Назад» (опционально).
 
     Returns:
         InlineKeyboardMarkup с кнопками вида [<name>].
     """
     creditors = await get_creditors(session)  # type: List[Creditor]
+    exclude_creditor_id = None
+
+    # Получаем outcome_creditor из состояния, если оно доступно
+    if state:
+        data = await state.get_data()
+        exclude_creditor_id = data.get("outcome_creditor")
+
     items: List[tuple[str, str, CreditorCallback]] = [
         (
             cr.name,
@@ -43,6 +52,7 @@ async def create_creditor_keyboard(session: AsyncSession, state=None) -> InlineK
             CreditorCallback(creditor_id=cr.creditor_id),
         )
         for cr in creditors
+        if cr.creditor_id != exclude_creditor_id
     ]
 
     # Автоматически формируем оптимальный layout: много колонок, если имена короткие

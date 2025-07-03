@@ -1,0 +1,51 @@
+# FinFlow/docker-compose.prod.yml
+# Конфигурация для продакшена: запускаются PostgreSQL, Redis и бот.
+
+services:
+  # --------------------------------------------------------------------- #
+  # Bot ‑ основной сервис для продакшена                                  #
+  # --------------------------------------------------------------------- #
+  bot:
+    build: .
+    env_file: .env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+    command: ["/bin/sh", "-c", "if [ ! -f /app/.db_initialized ]; then echo 'Database not initialized. Running init_db and fill...'; sleep 10; python -m src.db.service.init_db && python -m src.db.lists.fill && touch /app/.db_initialized; fi && python -m src.bot.bot"]
+
+  # --------------------------------------------------------------------- #
+  # PostgreSQL                                                            #
+  # --------------------------------------------------------------------- #
+  postgres:
+    image: postgres:15
+    env_file: .env.prod
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------- #
+  # Redis                                                                 #
+  # --------------------------------------------------------------------- #
+  redis:
+    image: redis:7
+    env_file: .env.prod
+    command: >
+      sh -c 'exec redis-server --requirepass "$${REDIS_PASSWORD}"'
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  pg_data:
+  redis_data:

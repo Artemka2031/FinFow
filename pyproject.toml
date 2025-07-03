@@ -3,8 +3,6 @@ name        = "finflow"
 version     = "0.1.0"
 description = "Financial operations tracking bot"
 authors     = ["Artemka2031 <pereiatentcev@gmail.com>"]
-readme      = "README.md"
-packages    = [{ include = "src", from = "." }]
 
 [tool.poetry.dependencies]
 python            = "3.13.2"
@@ -31,12 +29,7 @@ mypy            = "1.10.0"
 requires      = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+# Отключаем создание виртуального окружения Poetry
 [virtualenvs]
-in-project = true
+in-project = false
 
-[tool.black]
-line-length = 120
-
-[tool.isort]
-profile      = "black"
-line_length  = 120

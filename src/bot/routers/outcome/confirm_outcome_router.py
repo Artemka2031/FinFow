@@ -1,224 +1,260 @@
 # -*- coding: utf-8 -*-
 # FinFlow/src/bot/routers/outcome/confirm_outcome_router.py
-"""
-Роутер для обработки суммы, комментария и подтверждения операции «Выбытие».
-"""
+"""Подтверждение операции «Выбытие» (сумма → коэффициент → комментарий → YES/NO)."""
 
 from __future__ import annotations
 
 from typing import Final
 
-from aiogram import Router, Bot, F
-from aiogram.filters import StateFilter, BaseFilter
+from aiogram import Bot, F, Router
+from aiogram.filters import BaseFilter, StateFilter
 from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.bot.state import OperationState, reset_state
-from src.bot.utils.legacy_messages import delete_key_messages, delete_tracked_messages, track_messages
+from src.bot.utils.legacy_messages import (
+    delete_key_messages,
+    delete_tracked_messages,
+    track_messages,
+)
 from src.core.logger import configure_logger
-from src.db import get_async_session, get_wallet, create_outcome, get_project, get_creditor, get_article, \
-    get_contractor, get_material, get_employee, get_founder
+from src.db import (
+    create_outcome,
+    get_async_session,
+    get_wallet,
+    get_creditor,
+    get_project,
+    get_article,
+    get_contractor,
+    get_material,
+    get_employee,
+    get_founder,
+)
 
+# ───────────────────────────── UI‑КОНСТАНТЫ ──────────────────────────────
+EMO_CONFIRM  = "✅"
+EMO_CANCEL   = "🚫"
+EMO_REPEAT   = "🔄"
+EMO_WALLET   = "🏦"
+EMO_CREDITOR = "🤝"
+EMO_PROJECT  = "🗂️"
+EMO_GENERAL  = "📂"
+EMO_ARTICLE  = "📄"
+EMO_AMOUNT   = "💰"
+EMO_COEFF    = "📈"
+
+BTN_CONFIRM_TEXT: Final = f"{EMO_CONFIRM} Подтвердить"
+BTN_CANCEL_TEXT:  Final = f"{EMO_CANCEL} Отклонить"
+
+# ─────────────────────────── РОУТЕР И ЛОГГЕР ─────────────────────────────
 router: Final = Router()
-log = configure_logger(prefix="CONFIRM_OUTCOME", color="red", level="INFO")
+log = configure_logger(prefix="CONF_OUT", color="red", level="INFO")
 
-
-# ──────────────────────────── CallbackData ─────────────────────────
+# ─────────────────────────── CallbackData ────────────────────────────────
 class OutcomeConfirmCallback(CallbackData, prefix="confirm-outcome"):
-    """CallbackData для кнопок подтверждения/отмены."""
     action: str  # "yes" | "no"
 
-
-# ──────────────────────────── Клавиатура ───────────────────────────
+# ──────────────────────────── Клавиатура ─────────────────────────────────
 def create_confirm_keyboard() -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Подтвердить", callback_data=OutcomeConfirmCallback(action="yes").pack())
-    kb.button(text="🚫 Отклонить", callback_data=OutcomeConfirmCallback(action="no").pack())
+    kb.button(text=BTN_CONFIRM_TEXT, callback_data=OutcomeConfirmCallback(action="yes").pack())
+    kb.button(text=BTN_CANCEL_TEXT,  callback_data=OutcomeConfirmCallback(action="no").pack())
     kb.adjust(2)
     return kb
 
-
-# ───────────────────── Формирование сообщения ──────────────────────
+# ─────────────────── Формирование итоговой сводки ───────────────────────
 async def format_operation_message(data: dict) -> str:
-    outcome_wallet = data.get("outcome_wallet")
-    outcome_creditor = data.get("outcome_creditor")
-    outcome_chapter = data.get("outcome_chapter")
-    outcome_article = data.get("outcome_article")
-    amount = data.get("operation_amount", 0)
-    comment = data.get("operation_comment", "—")
-    op_date = data.get("operation_date", "Не выбрано")
+    """Сводка выбытия с коэффициентом, если есть."""
+    wallet_id   = data.get("outcome_wallet")
+    creditor_id = data.get("outcome_creditor")
+    chapter_id  = data.get("outcome_chapter")
+    article_id  = data.get("outcome_article")
+    saving_coeff = data.get("saving_coeff")  # NEW
+    amount      = abs(data.get("operation_amount", 0))
+    comment     = data.get("operation_comment", "—")
+    op_date     = data.get("operation_date", "Не выбрано")
 
     async with get_async_session() as session:
-        if outcome_wallet:
-            wallet = await get_wallet(session, outcome_wallet)
-            source = f"Кошелёк: <b>{wallet.wallet_number if wallet else outcome_wallet}</b>\n"
-        elif outcome_creditor:
-            creditor = await get_creditor(session, outcome_creditor)
-            source = f"Кредитор: <b>{creditor.name if creditor else outcome_creditor}</b>\n"
+        # источник
+        if wallet_id:
+            wallet = await get_wallet(session, wallet_id)
+            src = f"{EMO_WALLET} Источник: <b>{wallet.wallet_number}</b>\n"
+        elif creditor_id:
+            cred = await get_creditor(session, creditor_id)
+            src = f"{EMO_CREDITOR} Источник: <b>{cred.name}</b>\n"
         else:
-            source = "Источник: <b>Не указан</b>\n"
+            src = "Источник: <b>Не указан</b>\n"
 
-        # Получаем название статьи
-        article_name = "Не выбрано"
-        if outcome_article:
-            article = await get_article(session, outcome_article)
-            article_name = article.name if article else str(outcome_article)
+        # раздел
+        if chapter_id:
+            proj = await get_project(session, chapter_id)
+            chapter_line = (
+                f"{EMO_PROJECT} Категория: <b>По проектам</b>\n"
+                f"   {EMO_PROJECT} Проект: <b>{proj.name}</b>\n"
+            )
+        else:
+            chapter_line = f"{EMO_GENERAL} Категория: <b>Общие</b>\n"
 
-        # Дополнительная информация
-        additional_info = ""
-        if outcome_chapter:
-            project = await get_project(session, outcome_chapter)
-            additional_info = f"Проект: <b>{project.name if project else outcome_chapter}</b>\n"
-        if data.get("contractor_id"):
-            contractor = await get_contractor(session, data["contractor_id"])
-            additional_info += f"Подрядчик: <b>{contractor.name if contractor else data['contractor_id']}</b>\n"
-        elif data.get("material_id"):
-            material = await get_material(session, data["material_id"])
-            additional_info += f"Материал: <b>{material.name if material else data['material_id']}</b>\n"
-        elif data.get("employee_id"):
-            employee = await get_employee(session, data["employee_id"])
-            additional_info += f"Сотрудник: <b>{employee.name if employee else data['employee_id']}</b>\n"
-        elif data.get("outcome_article_creditor"):
-            additional_info += f"Кредитор (статья 29): <b>{data['outcome_article_creditor']}</b>\n"
-        elif data.get("outcome_founder_id"):
-            founder = await get_founder(session, data["outcome_founder_id"])
-            additional_info += f"Учредитель: <b>{founder.name if founder else data['outcome_founder_id']}</b>\n"
+        # статья
+        art_line = ""
+        if article_id:
+            art = await get_article(session, article_id)
+            art_line = f"{EMO_ARTICLE} Статья: <b>{art.name if art else article_id}</b>\n"
 
-    return (
-        f"Дата: <code>{op_date}</code>\n"
-        f"Тип операции: <b>Выбытие</b>\n"
-        f"{source}"
-        f"Раздел: <b>{'По проектам' if outcome_chapter else 'Общие' if not outcome_chapter else 'Не указан'}</b>\n"
-        f"Статья: <b>{article_name}</b>\n"
-        f"{additional_info if additional_info else ''}"
-        f"Введённая <b>сумма</b>: <code>{amount}</code>\n"
-        f"Комментарий: <i>{comment}</i>"
+        # уточнители
+        extra = ""
+        if cid := data.get("contractor_id"):
+            contr = await get_contractor(session, cid)
+            extra += f"👷 Подрядчик: <b>{contr.name}</b>\n"
+        if mid := data.get("material_id"):
+            mat = await get_material(session, mid)
+            extra += f"🧱 Материал: <b>{mat.name}</b>\n"
+        if eid := data.get("employee_id"):
+            emp = await get_employee(session, eid)
+            extra += f"👤 Сотрудник: <b>{emp.name}</b>\n"
+        if art_cred := data.get("outcome_article_creditor"):
+            extra += f"{EMO_CREDITOR} Кредитор (ст.29): <b>{art_cred}</b>\n"
+        if fid := data.get("outcome_founder_id"):
+            founder = await get_founder(session, fid)
+            extra += f"🏢 Учредитель: <b>{founder.name}</b>\n"
+
+    amount_str = f"{amount:,.2f}".replace(",", " ")  # НБ‑пробел
+
+    coeff_line = (
+        f"{EMO_COEFF} Коэффициент экономии: <b>{saving_coeff:.2f}</b>\n"
+        if saving_coeff is not None else ""
     )
 
+    return (
+        f"🟥 <b>Выбытие</b> | Дата: <code>{op_date}</code>\n"
+        f"{src}{chapter_line}{art_line}{extra}"
+        f"{coeff_line}"
+        f"{EMO_AMOUNT} Сумма: <b>{amount_str}</b> ₽\n"
+        f"📝 Комментарий: <i>{comment}</i>"
+    )
 
-# ─────────────────────── Custom Filter ────────────────────────────
+# ─────────────────────── Пользовательский фильтр ─────────────────────────
 class OutcomeOperationFilter(BaseFilter):
     async def __call__(self, message: Message, state: FSMContext) -> bool:
-        data = await state.get_data()
-        return data.get("operation_type") == "Выбытие"
+        return (await state.get_data()).get("operation_type") == "Выбытие"
 
-
-# ─────────────── Шаг 8: комментарий → подтверждение ────────────────
+# ───────────── комментарий → подтверждение ───────────────────────────────
 @router.message(StateFilter(OperationState.entering_operation_comment), OutcomeOperationFilter())
 @track_messages
 async def handle_comment(msg: Message, state: FSMContext, bot: Bot) -> None:
     comment = (msg.text or "").strip()
     await state.update_data(operation_comment=comment)
+    log.info(f"Юзер {msg.from_user.full_name} ({msg.from_user.id}): добавил комментарий")
 
     data = await state.get_data()
     chat_id = msg.chat.id
-
-    # Удаляем предыдущие сообщения
     await msg.delete()
-    await delete_tracked_messages(bot, state, chat_id)
-    await delete_key_messages(bot, state, chat_id, exclude_message_ids=[
-        data.get("summary_message_id"),
-        data.get("amount_message_id"),
-    ])
 
-    # Формируем и отправляем сообщение подтверждения
-    operation_info = await format_operation_message(data)
-    confirm_text = f"Подтвердите операцию:\n{operation_info}\n\nНажмите кнопку для подтверждения: ✅"
-    sent_message = await bot.send_message(
-        chat_id=chat_id,
-        text=confirm_text,
+    info = await format_operation_message(data)
+    sent = await bot.send_message(
+        chat_id,
+        f"Подтвердите операцию:\n{info}\n\nНажмите {EMO_CONFIRM} для подтверждения:",
         reply_markup=create_confirm_keyboard().as_markup(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
-    await state.update_data(confirm_message_id=sent_message.message_id)
+    await state.update_data(confirm_message_id=sent.message_id)
     await state.set_state(OperationState.confirming_operation)
 
-
-# ─────────────────────────── YES ──────────────────────────────────
+# ─────────────────────── ПОДТВЕРЖДЕНИЕ (YES) ────────────────────────────
 @router.callback_query(
     OutcomeConfirmCallback.filter(F.action == "yes"),
-    OperationState.confirming_operation
+    OperationState.confirming_operation,
 )
 @track_messages
 async def confirm_yes(
-        cb: CallbackQuery, state: FSMContext, bot: Bot, callback_data: OutcomeConfirmCallback
+    cb: CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+    callback_data: OutcomeConfirmCallback,  # noqa: ARG001
 ) -> None:
     data = await state.get_data()
     chat_id, message_id = cb.message.chat.id, cb.message.message_id
     info = await format_operation_message(data)
 
-    log.info("User %s подтвердил операцию", cb.from_user.id)
+    log.info(f"Юзер {cb.from_user.full_name} ({cb.from_user.id}): подтвердил выбытие")
+
     try:
         async with get_async_session() as session:
             outcome_data = {
-                "recording_date": data.get("recording_date"),
-                "operation_date": data.get("operation_date"),
-                "outcome_wallet": data.get("outcome_wallet"),
+                "recording_date":  data.get("recording_date"),
+                "operation_date":  data.get("operation_date"),
+                "outcome_wallet":  data.get("outcome_wallet"),
                 "outcome_creditor": data.get("outcome_creditor"),
                 "outcome_chapter": data.get("outcome_chapter"),
                 "outcome_article": data.get("outcome_article"),
                 "contractor_name": data.get("contractor_id"),
-                "material_name": data.get("material_id"),
-                "employee_name": data.get("employee_id"),
+                "material_name":   data.get("material_id"),
+                "employee_name":   data.get("employee_id"),
                 "outcome_founder": data.get("outcome_founder_id"),
                 "outcome_article_creditor": data.get("outcome_article_creditor"),
-                "operation_amount": -abs(data.get("operation_amount", 0)),  # Гарантируем отрицательное значение
+                "saving_coeff":    data.get("saving_coeff"),  # NEW
+                "operation_amount": -abs(data.get("operation_amount", 0)),
                 "operation_comment": data.get("operation_comment"),
             }
-            # Удаляем пустые или None значения
             outcome_data = {k: v for k, v in outcome_data.items() if v is not None}
             outcome_obj = await create_outcome(session, outcome_data)
 
             log.info(
-                f"Создан Outcome {outcome_obj.transaction_id}, Дата: {outcome_obj.operation_date}, "
-                f"Источник: {outcome_obj.outcome_wallet or outcome_obj.outcome_creditor}, Сумма: {outcome_obj.operation_amount}"
+                f"Создан Outcome {outcome_obj.transaction_id} – "
+                f"Дата: {outcome_obj.operation_date}, "
+                f"Источник: {outcome_obj.outcome_wallet or outcome_obj.outcome_creditor}, "
+                f"Сумма: {outcome_obj.operation_amount}, "
+                f"Коэфф.: {outcome_obj.saving_coeff}"
             )
 
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=f"Выбытие успешно добавлено ✅\n{info}",
+            text=f"Выбытие успешно добавлено {EMO_CONFIRM}\n{info}",
             parse_mode="HTML",
         )
-        await bot.send_message(chat_id, "Выберите следующую операцию: 🔄")
+        await bot.send_message(chat_id, f"Выберите следующую операцию: {EMO_REPEAT}")
         await reset_state(state)
-    except Exception as e:
-        log.error(f"Ошибка при добавлении операции: {e}")
+    except Exception as err:  # noqa: BLE001
+        log.error(f"Ошибка при добавлении выбытия: {err}")
         await bot.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=f"Ошибка при добавлении выбытия:\n{info}\n\n{e} ❌",
+            text=f"Ошибка при добавлении выбытия:\n{info}\n\n{err} {EMO_CANCEL}",
             parse_mode="HTML",
         )
 
     await cb.answer()
 
-
-# ─────────────────────────── NO ───────────────────────────────────
+# ───────────────────────── ОТКЛОНЕНИЕ (NO) ──────────────────────────────
 @router.callback_query(
     OutcomeConfirmCallback.filter(F.action == "no"),
-    OperationState.confirming_operation
+    OperationState.confirming_operation,
 )
 @track_messages
 async def confirm_no(
-        cb: CallbackQuery, state: FSMContext, bot: Bot, callback_data: OutcomeConfirmCallback
+    cb: CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+    callback_data: OutcomeConfirmCallback,  # noqa: ARG001
 ) -> None:
     data = await state.get_data()
     chat_id, message_id = cb.message.chat.id, cb.message.message_id
     info = await format_operation_message(data)
 
-    log.info("User %s отменил операцию", cb.from_user.id)
+    log.info(f"Юзер {cb.from_user.full_name} ({cb.from_user.id}): отменил выбытие")
 
     await delete_tracked_messages(bot, state, chat_id)
     await delete_key_messages(bot, state, chat_id)
+
     await bot.edit_message_text(
         chat_id=chat_id,
         message_id=message_id,
-        text=f"Добавление выбытия отменено:\n{info} 🚫",
+        text=f"Добавление выбытия отменено:\n{info} {EMO_CANCEL}",
         parse_mode="HTML",
     )
-    await bot.send_message(chat_id, "Выберите следующую операцию: 🔄")
+    await bot.send_message(chat_id, f"Выберите следующую операцию: {EMO_REPEAT}")
     await reset_state(state)
     await cb.answer()

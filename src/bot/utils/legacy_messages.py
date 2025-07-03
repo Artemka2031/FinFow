@@ -74,10 +74,10 @@ async def delete_key_messages(
     if exclude_message_id is not None:
         exclude_ids.add(exclude_message_id)
 
-    # Всегда добавляем date_message_id в исключения, если оно существует
-    date_message_id = data.get("date_message_id")
-    if date_message_id:
-        exclude_ids.add(date_message_id)
+    # # Всегда добавляем date_message_id в исключения, если оно существует
+    # date_message_id = data.get("date_message_id")
+    # if date_message_id:
+    #     exclude_ids.add(date_message_id)
 
     # Удаляем только сообщения финального состояния (confirming_operation), сохраняя сводку и сумму до этого
     for state_key, message_key in KEY_MESSAGE_FIELDS.items():

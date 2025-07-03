@@ -11,6 +11,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, List
+from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 from pydantic import Field, PostgresDsn, RedisDsn, ValidationError, BeforeValidator
@@ -25,7 +26,7 @@ logger = configure_logger(prefix="CFG", color="yellow", level="DEBUG")
 # .env discovery                                                              #
 # --------------------------------------------------------------------------- #
 project_root = Path(__file__).resolve().parents[2]
-env_dev = project_root / ".env.dev"
+env_dev = project_root / ".env.prod"
 env_prod = project_root / ".env.prod"
 env_file = env_dev if env_dev.exists() else env_prod if env_prod.exists() else project_root / ".env"
 
@@ -108,11 +109,10 @@ class Settings(BaseSettings):
         Собираем вручную, чтобы избежать двойного "//" в пути:
         postgresql+asyncpg://user:password@host:port/dbname
         """
+        pwd = quote_plus(self.postgres_password)  # экранируем спец‑символы
         return (
-            f"postgresql+asyncpg://"
-            f"{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}"
-            f"/{self.postgres_db}"
+            f"postgresql+asyncpg://{self.postgres_user}:{pwd}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
     @property

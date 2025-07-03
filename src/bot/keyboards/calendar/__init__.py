@@ -6,5 +6,5 @@ from .custom_calendar import CustomCalendar
 
 async def create_date_kb() -> InlineKeyboardMarkup:
     """Создает клавиатуру для выбора даты с кастомным календарем."""
-    calendar = CustomCalendar(locale="ru")
+    calendar = CustomCalendar(locale="ru_RU.UTF-8")
     return await calendar.start_calendar()
