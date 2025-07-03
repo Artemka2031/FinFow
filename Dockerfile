@@ -30,12 +30,13 @@ ENV LANG=ru_RU.UTF-8 \
     TZ=Europe/Moscow \
     POETRY_VERSION=2.1.3 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    POETRY_VIRTUALENVS_CREATE=false
 
 # ─────────────────────────── Poetry + deps ────────────────────────────────────
 RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 COPY pyproject.toml poetry.lock* /app/
-RUN poetry config virtualenvs.create false && \
+RUN poetry config virtualenvs.create $POETRY_VIRTUALENVS_CREATE && \
     poetry lock && \
     poetry install --no-interaction --no-ansi --no-root
 

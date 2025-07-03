@@ -1,31 +1,17 @@
-# FinFlow/docker-compose.dev.yml (dev‑ориентированный по‑умолчанию)
-# Используйте переменную окружения COMPOSE_PROFILES=production,
-# или файл‑override docker-compose.prod.yml, чтобы запустить бота в проде.
+# FinFlow/docker-compose.dev.yml
+# Конфигурация для разработки: запускаются PostgreSQL и Redis, бот не запускается.
 
 services:
-  # --------------------------------------------------------------------- #
-  # Bot ‑ включается ТОЛЬКО в профиле «production»                        #
-  # --------------------------------------------------------------------- #
-  bot:
-    build: .
-    env_file: .env.prod          # в проде
-    depends_on:
-      - postgres
-      - redis
-    volumes:
-      - .:/app
-    profiles: ["production"]
-
   # --------------------------------------------------------------------- #
   # PostgreSQL                                                            #
   # --------------------------------------------------------------------- #
   postgres:
     image: postgres:15
-    env_file: .env.dev           # ← dev‑режим по‑умолчанию
+    env_file: .env.dev
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"  # Дефолт 5433 для dev
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data_dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -41,10 +27,14 @@ services:
     command: >
       sh -c 'exec redis-server --requirepass "$${REDIS_PASSWORD}"'
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"  # Дефолт 6380 для dev
     volumes:
-      - redis_data:/data
+      - redis_data_dev:/data
+
+networks:
+  dev_network:
+    driver: bridge
 
 volumes:
-  pg_data:
-  redis_data:
+  pg_data_dev:
+  redis_data_dev:

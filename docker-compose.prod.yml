@@ -24,7 +24,7 @@ services:
     image: postgres:15
     env_file: .env.prod
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"  # Дефолт 5432 для prod
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
@@ -42,9 +42,13 @@ services:
     command: >
       sh -c 'exec redis-server --requirepass "$${REDIS_PASSWORD}"'
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"  # Дефолт 6379 для prod
     volumes:
       - redis_data:/data
+
+networks:
+  prod_network:
+    driver: bridge
 
 volumes:
   pg_data:

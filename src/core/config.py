@@ -7,6 +7,7 @@ Reads variables from `.env.*` or the real environment and exposes them via the
 `get_settings()` singleton.  Compatible with Pydantic-Settings ≥2.1.
 """
 import json
+import platform
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -26,12 +27,21 @@ logger = configure_logger(prefix="CFG", color="yellow", level="DEBUG")
 # .env discovery                                                              #
 # --------------------------------------------------------------------------- #
 project_root = Path(__file__).resolve().parents[2]
-env_dev = project_root / ".env.prod"
+env_dev = project_root / ".env.dev"
 env_prod = project_root / ".env.prod"
-env_file = env_dev if env_dev.exists() else env_prod if env_prod.exists() else project_root / ".env"
+env_file = None
 
-load_dotenv(env_file)
-logger.debug(f"Loaded environment variables from {env_file}")
+# Определяем ОС
+if platform.system() == "Windows":
+    env_file = env_dev if env_dev.exists() else project_root / ".env"
+else:  # Предполагаем Linux для prod
+    env_file = env_prod if env_prod.exists() else project_root / ".env"
+
+if env_file and env_file.exists():
+    load_dotenv(env_file)
+    logger.debug(f"Loaded environment variables from {env_file}")
+else:
+    logger.warning("No .env file found, using default environment variables")
 
 
 # Кастомный валидатор для преобразования строки в список целых чисел
@@ -82,13 +92,13 @@ class Settings(BaseSettings):
     postgres_password: str = Field(..., alias="POSTGRES_PASSWORD")
     postgres_db: str = Field(..., alias="POSTGRES_DB")
     postgres_host: str = Field(..., alias="POSTGRES_HOST")
-    postgres_port: int = Field(5432, alias="POSTGRES_PORT")
+    postgres_port: int = Field(..., alias="POSTGRES_PORT")
 
     # ---- Redis ------------------------------------------------------------ #
     redis_user: str = Field("default", alias="REDIS_USER")
     redis_password: str = Field(..., alias="REDIS_PASSWORD")
     redis_host: str = Field(..., alias="REDIS_HOST")
-    redis_port: int = Field(6379, alias="REDIS_PORT")
+    redis_port: int = Field(..., alias="REDIS_PORT")
 
     # ---- Bot -------------------------------------------------------------- #
     bot_token: str = Field(..., alias="BOT_TOKEN")
